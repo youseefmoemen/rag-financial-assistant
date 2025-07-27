@@ -3,6 +3,10 @@ import torch.nn.functional as F
 
 
 def info_nce_loss(query_embedding, doc_embedding, tempetature=0.05):
+    """
+    query_embedding: shape (B, D)
+    doc_embedding: shape (B, D)
+    """
     query_embedding = F.normalize(query_embedding, dim=1)
     doc_embedding = F.normalize(doc_embedding, dim=1)
 

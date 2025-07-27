@@ -61,12 +61,27 @@ def create_index(data_loader, model_name: str):
 
 def compute_loss(model_name, data_loader):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = SentenceTransformer(model_name).to(device)
-    for batch in data_loader:
-        query = [item['query_text'] for item in batch] # B
-        corpus = [item['corpus_text'] for item in batch] # B * 4
-        corpus = [process_inputs(query, c, model_name=model_name)[1] for c in corpus]
-        
+    model = SentenceTransformer(model_name).to(device) # Can't we use the llamaindex one
+    all_losses = []
+    for batch in tqdm(data_loader, desc="Calculating initial loss"):
+        query = [sample['query_text'] for sample in batch]
+        corpus = [[c for c in sample['corpus_text'] if c != '0' ]for sample in batch] # B * 4
+        corpus = [random.choice(c) for c in corpus]
+        query, corpus = process_inputs(query, corpus, model_name)    
+        query_embeddings = model.encode(
+            query, 
+            convert_to_tensor=True,
+            device=device
+        )
+        corpus_embeddings = model.encode(
+            corpus, 
+            convert_to_tensor=True, 
+            device=device
+        )
+        all_losses.append(info_nce_loss(query_embeddings, corpus_embeddings))
+    return sum(all_losses) / len(all_losses)
+
+
 
 
 def evaluate(model, data_index, data_loader):
@@ -127,6 +142,14 @@ def run():
         print(f"Evaluation metrics for {all_models[i]}: {all_metrics[i]}")
 
 
+
+def test():
+    model_name = 'intfloat/e5-small'
+    data_loader = load_data(split='test')
+    loss = compute_loss(model_name, data_loader)
+    print('loss', loss)
+
+
 if __name__ == '__main__':
-    run()
+    test()
 
