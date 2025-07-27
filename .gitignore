@@ -1,0 +1,48 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Environment files
+.env
+.venv/
+venv/
+env/
+*.env
+
+# MLflow tracking artifacts
+mlruns/
+mlflow.db
+
+# Model files and checkpoints
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+
+# Logs and outputs
+*.log
+*.out
+*.tmp
+
+# VSCode and IDE configs
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# PyTorch Lightning logs (optional)
+lightning_logs/
+
+# Hugging Face caches
+.cache/
+huggingface/
+
+# Colab and Jupyter metadata
+*.ipynb
