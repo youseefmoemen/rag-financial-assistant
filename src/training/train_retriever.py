@@ -1,4 +1,4 @@
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+import mlflow
 
 list_of_models = [
     "intfloat/e5-small",
@@ -10,11 +10,19 @@ list_of_models = [
 ]
 
 
+def setting_mlflow():
+    TRACKING_URI = "sqlite:///mlflow/mlflow.db"
+    EXPERIMENT_NAME = 'RAG-Financial-Assistant'
+    mlflow.set_tracking_uri(TRACKING_URI)
+    mlflow.set_experiment(EXPERIMENT_NAME)
+    print(f"Tracking URI set to {TRACKING_URI} and experiment name set to {EXPERIMENT_NAME}.")
+
+
+
+
+def run():
+    pass
 
 
 if __name__ == '__main__':
-    for model_name in list_of_models:
-        print(f"Loading model: {model_name}")
-        model = HuggingFaceEmbedding(model_name)
-        print(f"Model {model_name} loaded successfully.")
-        # You can add additional code here to test the model or perform inference
+    run()

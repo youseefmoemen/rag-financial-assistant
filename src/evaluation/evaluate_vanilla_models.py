@@ -36,9 +36,9 @@ def process_inputs(query_text, corpus_text, model_name):
 
 
 def load_data(split: str = "train"):
-    fida_data = FiqaDataset(split=split)
-    print(f"Number of samples in FiQA {split} dataset: {len(fida_data)}")
-    loader = DataLoader(fida_data, batch_size=32, collate_fn=collate_fn)
+    fiqadata = FiqaDataset(split=split)
+    print(f"Number of samples in FiQA {split} dataset: {len(fiqadata)}")
+    loader = DataLoader(fiqadata, batch_size=32, collate_fn=collate_fn)
     return loader
 
 def load_model(model_name: str):
@@ -91,39 +91,40 @@ def compute_loss(model_name, data_loader):
     return total_loss.item()
 
 
-
-
 def evaluate(model_name, data_index, data_loader):
     """
     Evaluate the model using the data_index and data loader.
     """
-    # Placeholder for evaluation logic
     data_index = data_index.as_retriever(similarity_top_k=5)
     runs = {}
     qrels = {}
+
     for batch in tqdm(data_loader, desc=f"Evaluating {model_name}"):
-        query_text = [sample['query_text'] for sample in batch]
-        corpus_id = [batch[i]['corpus_id'] for i in range(len(batch))]
-        corpus = [[c for c in sample['corpus_text'] if c != '0' ]for sample in batch] # B * 4
-        corpus = [random.choice(c) for c in corpus]
-        query, corpus = process_inputs(query_text, corpus, model_name) 
-        
-        for idx, query in enumerate(query_text):
-            results = data_index.retrieve(query)
-            runs[batch[idx]['query_id']] = {
-                (result.metadata['corpus_id'], result.score) for result in results
+        query_texts = [sample['query_text'] for sample in batch]
+        corpus_ids = [sample['corpus_id'] for sample in batch]
+        corpus_texts = [[c for c in sample['corpus_text'] if c != '0'] for sample in batch]
+        selected_corpus = [random.choice(c) for c in corpus_texts]
+        query_texts, selected_corpus = process_inputs(query_texts, selected_corpus, model_name)
+
+        for idx, q_text in enumerate(query_texts):
+            results = data_index.retrieve(q_text)
+            query_id = batch[idx]['query_id']
+            runs[str(query_id)] = {
+                str(result.metadata['corpus_id']): result.score for result in results
             }
-            qrels[batch[idx]['query_id']] = {i: 1 for i in corpus_id[idx] if i!= -1}
-        
-        runs = {
-            qid: {doc_id: score for doc_id, score in sorted(results, key=lambda x: x[1], reverse=True)}
-            for qid, results in runs.items()
-        }
+            qrels[str(query_id)] = {
+                str(i): 1 for i in corpus_ids[idx] if i != -1
+            }
+
+    # Sort results for each query by score (descending)
+    runs = {
+        qid: dict(sorted(results.items(), key=lambda x: x[1], reverse=True))
+        for qid, results in runs.items()
+    }
+
     metrics = ir_measures.calc_aggregate([nDCG@10, Recall@5, MAP@10, MRR@10], qrels, runs)
     metrics['info_nce_loss'] = compute_loss(model_name, data_loader)
     return metrics
-
-
 
 def run():
     prepare_mlfow()
@@ -163,4 +164,3 @@ def run():
 
 if __name__ == '__main__':
     run()
-
