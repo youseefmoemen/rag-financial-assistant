@@ -1,5 +1,4 @@
-from sentence_transformers import SentenceTransformer
-
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 list_of_models = [
     "intfloat/e5-small",
@@ -16,6 +15,6 @@ list_of_models = [
 if __name__ == '__main__':
     for model_name in list_of_models:
         print(f"Loading model: {model_name}")
-        model = SentenceTransformer(model_name)
+        model = HuggingFaceEmbedding(model_name)
         print(f"Model {model_name} loaded successfully.")
         # You can add additional code here to test the model or perform inference
