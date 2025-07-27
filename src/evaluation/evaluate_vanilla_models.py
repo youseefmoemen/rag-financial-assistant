@@ -12,6 +12,7 @@ from tqdm import tqdm
 import torch
 
 
+
 def process_inputs(query_text, corpus_text, model_name):
     """
     Process the query and corpus text based on the model name.
@@ -62,6 +63,7 @@ def create_index(data_loader, model_name: str):
 def compute_loss(model_name, data_loader):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = SentenceTransformer(model_name).to(device) # Can't we use the llamaindex one
+    model._target_device = device
     all_losses = []
     for batch in tqdm(data_loader, desc="Calculating initial loss"):
         query = [sample['query_text'] for sample in batch]
@@ -84,31 +86,52 @@ def compute_loss(model_name, data_loader):
 
 
 
-def evaluate(model, data_index, data_loader):
+def evaluate(model_name, data_index, data_loader):
     """
     Evaluate the model using the data_index and data loader.
     """
     # Placeholder for evaluation logic
     data_index = data_index.as_retriever(similarity_top_k=5)
-    for batch in tqdm(data_loader, desc=f"Evaluating {model}"):
-        query_text = [batch[i]['query_text'] for i in range(len(batch))]
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = SentenceTransformer(model_name).to(device)
+    all_losses = []
+    for batch in tqdm(data_loader, desc=f"Evaluating {model_name}"):
+        query_text = [sample['query_text'] for sample in batch]
         corpus_id = [batch[i]['corpus_id'] for i in range(len(batch))]
+        corpus = [[c for c in sample['corpus_text'] if c != '0' ]for sample in batch] # B * 4
+        corpus = [random.choice(c) for c in corpus]
+        query, corpus = process_inputs(query_text, corpus, model_name) 
+        query_embeddings = model.encode(
+            query, 
+            convert_to_tensor=True,
+            device=device
+        )
+        corpus_embeddings = model.encode(
+            corpus, 
+            convert_to_tensor=True, 
+            device=device
+        )
+        all_losses.append(info_nce_loss(query_embeddings, corpus_embeddings))
+        
         qrels = {
             f"{batch[idx]['query_id']}" : [(i, 1)] for idx, i in enumerate(corpus_id) if i != -1
         }
         runs = {}
         qrels = {}
+        
         for idx, query in enumerate(query_text):
             results = data_index.retrieve(query)
             runs[batch[idx]['query_id']] = {
                 (result.metadata['corpus_id'], result.score) for result in results
             }
             qrels[batch[idx]['query_id']] = {i: 1 for i in corpus_id[idx] if i!= -1}
+        
         runs = {
             qid: {doc_id: score for doc_id, score in sorted(results, key=lambda x: x[1], reverse=True)}
             for qid, results in runs.items()
         }
     metrics = ir_measures.calc_aggregate([nDCG@10, Recall@5, MAP@10, MRR@10], qrels, runs)
+    metrics['info_nce_loss'] = sum(all_losses) / len(all_losses)
     return metrics
 
 
@@ -126,7 +149,7 @@ def run():
     print('Loading data...')
     data_loader = load_data(split="test")
     print(f"Data loaded with {len(data_loader)} batches.")
-    for model_name in all_models:
+    for model_name in all_models[:2]:
         print('Loading model:', model_name)
         load_model(model_name)
         print(f"Model {model_name} loaded successfully.")
@@ -142,14 +165,6 @@ def run():
         print(f"Evaluation metrics for {all_models[i]}: {all_metrics[i]}")
 
 
-
-def test():
-    model_name = 'intfloat/e5-small'
-    data_loader = load_data(split='test')
-    loss = compute_loss(model_name, data_loader)
-    print('loss', loss)
-
-
 if __name__ == '__main__':
-    test()
+    run()
 
