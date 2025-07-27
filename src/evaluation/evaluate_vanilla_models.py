@@ -11,7 +11,12 @@ from ir_measures import nDCG, Recall, MAP, MRR
 from tqdm import tqdm
 import torch
 
-
+def prepare_mlfow():
+    TRACKING_URI = "sqlite:///mlflow/mlflow.db"
+    EXPERIMENT_NAME = 'RAG-Financial-Assistant'
+    mlflow.set_tracking_uri(TRACKING_URI)
+    mlflow.set_experiment(EXPERIMENT_NAME)
+    print(f"Tracking URI set to {TRACKING_URI} and experiment name set to {EXPERIMENT_NAME}.")
 
 def process_inputs(query_text, corpus_text, model_name):
     """
@@ -81,7 +86,9 @@ def compute_loss(model_name, data_loader):
             device=device
         )
         all_losses.append(info_nce_loss(query_embeddings, corpus_embeddings))
-    return sum(all_losses) / len(all_losses)
+    total_loss = sum(all_losses) / len(all_losses)
+    mlflow.log_metric('number_of_parameters', sum(p.numel() for p in model.parameters()))
+    return total_loss.item()
 
 
 
@@ -92,32 +99,14 @@ def evaluate(model_name, data_index, data_loader):
     """
     # Placeholder for evaluation logic
     data_index = data_index.as_retriever(similarity_top_k=5)
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = SentenceTransformer(model_name).to(device)
-    all_losses = []
+    runs = {}
+    qrels = {}
     for batch in tqdm(data_loader, desc=f"Evaluating {model_name}"):
         query_text = [sample['query_text'] for sample in batch]
         corpus_id = [batch[i]['corpus_id'] for i in range(len(batch))]
         corpus = [[c for c in sample['corpus_text'] if c != '0' ]for sample in batch] # B * 4
         corpus = [random.choice(c) for c in corpus]
         query, corpus = process_inputs(query_text, corpus, model_name) 
-        query_embeddings = model.encode(
-            query, 
-            convert_to_tensor=True,
-            device=device
-        )
-        corpus_embeddings = model.encode(
-            corpus, 
-            convert_to_tensor=True, 
-            device=device
-        )
-        all_losses.append(info_nce_loss(query_embeddings, corpus_embeddings))
-        
-        qrels = {
-            f"{batch[idx]['query_id']}" : [(i, 1)] for idx, i in enumerate(corpus_id) if i != -1
-        }
-        runs = {}
-        qrels = {}
         
         for idx, query in enumerate(query_text):
             results = data_index.retrieve(query)
@@ -131,12 +120,13 @@ def evaluate(model_name, data_index, data_loader):
             for qid, results in runs.items()
         }
     metrics = ir_measures.calc_aggregate([nDCG@10, Recall@5, MAP@10, MRR@10], qrels, runs)
-    metrics['info_nce_loss'] = sum(all_losses) / len(all_losses)
+    metrics['info_nce_loss'] = compute_loss(model_name, data_loader)
     return metrics
 
 
 
 def run():
+    prepare_mlfow()
     all_models = [
         "intfloat/e5-small",
         "intfloat/e5-base",
@@ -149,17 +139,23 @@ def run():
     print('Loading data...')
     data_loader = load_data(split="test")
     print(f"Data loaded with {len(data_loader)} batches.")
-    for model_name in all_models[:2]:
-        print('Loading model:', model_name)
-        load_model(model_name)
-        print(f"Model {model_name} loaded successfully.")
-        print("Creating data_index...")
-        data_index = create_index(data_loader, model_name)
-        print("Index Created")
+    for model_name in all_models:
+        with mlflow.start_run(run_name=f'Evaluating-vanilla-{model_name}'):
+            mlflow.set_tag('isTrained', 'False')
+            print('Loading model:', model_name)
+            mlflow.log_param("base_model", model_name)
+            load_model(model_name)
+            print(f"Model {model_name} loaded successfully.")
+            print("Creating data_index...")
+            data_index = create_index(data_loader, model_name)
+            print("Index Created")
 
-        print("Evaluating model...")
-        metrics = evaluate(model_name, data_index, data_loader)
-        all_metrics.append(metrics)
+            print("Evaluating model...")
+            metrics = evaluate(model_name, data_index, data_loader)
+            all_metrics.append(metrics)
+            print(all_metrics)
+            for k, v in metrics.items():
+                mlflow.log_metric(str(k).replace('@', '_'), v)
 
     for i in range(len(all_metrics)):
         print(f"Evaluation metrics for {all_models[i]}: {all_metrics[i]}")
