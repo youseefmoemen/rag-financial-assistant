@@ -46,3 +46,6 @@ huggingface/
 
 # Colab and Jupyter metadata
 *.ipynb
+
+# Models
+models/
