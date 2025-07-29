@@ -1,5 +1,6 @@
 from llama_index.core import VectorStoreIndex, Document
 from tqdm import tqdm
+from llama_index.core import Settings
 
 
 def process_inputs(query_text, corpus_text, model_name):
@@ -17,7 +18,9 @@ def process_inputs(query_text, corpus_text, model_name):
     
     return query_text, corpus_text
 
-def create_index(data_loader, model_name: str):
+def create_index(data_loader, model_name: str, embed_model=None) -> VectorStoreIndex:
+    if embed_model is not None:
+        Settings.embed_model = embed_model
     data_index = VectorStoreIndex([])
     for batch in tqdm(data_loader, desc=f"Indexing for {model_name}"):
         query = [item['query_text'] for item in batch]

@@ -11,7 +11,14 @@ import ir_measures
 from ir_measures import nDCG, Recall, MAP, MRR
 from tqdm import tqdm
 import torch
-
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="`encoder_attention_mask` is deprecated and will be removed in version 4.55.0 for `BertSdpaSelfAttention.forward`.",
+    category=FutureWarning,
+    module="torch.nn.modules.module"
+)
+# ...rest of your imports...
 def prepare_mlfow():
     TRACKING_URI = "sqlite:///mlflow/mlflow.db"
     EXPERIMENT_NAME = 'RAG-Financial-Assistant'
@@ -60,7 +67,7 @@ def compute_loss(model_name, data_loader):
     return total_loss.item()
 
 
-def evaluate_lr(model_name, data_index, data_loader):
+def evaluate_lr(model_name, data_index, data_loader, compute_info_loss: bool = True):
     """
     Evaluate the model using the data_index and data loader.
     """
@@ -91,7 +98,8 @@ def evaluate_lr(model_name, data_index, data_loader):
     }
 
     metrics = ir_measures.calc_aggregate([nDCG@10, Recall@5, MAP@10, MRR@10], qrels, runs)
-    metrics['info_nce_loss'] = compute_loss(model_name, data_loader)
+    if compute_info_loss:
+        metrics['info_nce_loss'] = compute_loss(model_name, data_loader)
     return metrics
 
 def run():
@@ -122,7 +130,7 @@ def run():
             print("Index Created")
 
             print("Evaluating model...")
-            metrics = evaluate_lr(model_name, data_index, data_loader)
+            metrics = evaluate_lr(model_name, data_index, data_loader, compute_info_loss=True)
             all_metrics.append(metrics)
             print(all_metrics)
             for k, v in metrics.items():
