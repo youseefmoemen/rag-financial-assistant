@@ -122,7 +122,7 @@ def run():
     grid_product = list(product(*grid.values()))
     with tqdm(grid_product, desc="Grid Search", total=len(grid_product)) as grid_bar:
         for parms in grid_bar:
-            with mlflow.start_run():
+            with mlflow.start_run(run_name=f"fine-tune-[{parms[0].split('/')[-1]}]"):
                 model_name, lora_rank, lora_alpha, lora_doropout, lr = parms
                 grid_bar.set_postfix({
                     'model': model_name.split('/')[-1],
@@ -153,7 +153,7 @@ def run():
                 peft_model.save_pretrained(save_dir)
                 mlflow.log_artifact(save_dir, artifact_path="lora_weights")
                 mlflow.set_tag('isTrained', 'True')
-                mlflow.log_param('base_model', model_name)
+                mlflow.log_param('base_model', model_name.split('/')[-1])
                 mlflow.log_param('lora_rank', lora_rank)
                 mlflow.log_param('lora_alpha', lora_alpha)
                 mlflow.log_param('lora_doropout', lora_doropout)
