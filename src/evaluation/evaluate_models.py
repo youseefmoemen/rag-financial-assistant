@@ -3,7 +3,7 @@ import sys
 sys.path.append("/content/rag-financial-assistant")
 from src.data.fiqa_dataset import FiqaDataset, collate_fn
 from src.utils.losses import info_nce_loss
-from src.utils.indexing_data import process_inputs, create_index
+from src.data.indexing_data import process_inputs, create_index
 from torch.utils.data import DataLoader
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core import Settings
@@ -43,6 +43,7 @@ def load_data(split: str = "train"):
 
 def load_model(model_name: str):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print('-----------------', model_name)
     embed_model = HuggingFaceEmbedding(model_name, device=device)
     embed_model._target_device = device
     Settings.embed_model = embed_model
@@ -119,12 +120,14 @@ def run():
         "all-MiniLM-L12-v2",
         "multi-qa-MiniLM-L6-cos-v1",
         "all-mpnet-base-v2",
+        'sentence-transformers/msmarco-distilbert-base-v4',
+        'thenlper/gte-large',
     ]
     all_metrics = []
     print("Loading data...")
     data_loader = load_data(split="test")
     print(f"Data loaded with {len(data_loader)} batches.")
-    for model_name in all_models:
+    for model_name in [all_models[-2]]:
         with mlflow.start_run(run_name=f"Evaluating-vanilla-{model_name}"):
             mlflow.set_tag("isTrained", "False")
             print("Loading model:", model_name)
