@@ -1,7 +1,6 @@
 import mlflow
 from sentence_transformers import SentenceTransformer
 import torch
-import json
 from peft import LoraConfig, get_peft_model, PeftModel
 from tqdm import tqdm
 import sys
@@ -173,7 +172,7 @@ def train(peft_model, train_data_loader, test_data_loader, optimizer, scheduler,
 
 def run():
     setting_mlflow()
-    NUM_EPOCHS = 4
+    NUM_EPOCHS = 1
     BATCH_SIZE = 8
     # Optimized grid - focus on promising configurations first
     model_name = 'sentence-transformers/all-mpnet-base-v2'

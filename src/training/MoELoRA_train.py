@@ -1,7 +1,7 @@
 import mlflow
 from sentence_transformers import SentenceTransformer
 import torch
-from peft import LoraConfig, get_peft_model, TaskType, PeftModel
+from peft import LoraConfig, get_peft_model, PeftModel, TaskType
 from tqdm import tqdm
 import sys
 sys.path.append("/content/rag-financial-assistant")
@@ -10,17 +10,63 @@ from src.utils.base_embedding import PEFTEmbeddingModel
 from src.evaluation.evaluate_models import evaluate_lr
 from src.data.indexing_data import create_index
 from src.data.fiqa_dataset import FiqaDataset, collate_fn
-from itertools import product
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import random
+import os   
 import warnings
+import torch.nn as nn
+import copy
 warnings.filterwarnings(
     "ignore",
     message="`encoder_attention_mask` is deprecated and will be removed in version 4.55.0 for `BertSdpaSelfAttention.forward`.",
     category=FutureWarning,
     module="torch.nn.modules.module"
 )
+
+
+
+class MoELoRA(nn.Module):
+    def __init__(self, n_experts, base_layer, hidden_size, lora_rank, lora_alpha, lora_dropout, name, device):
+        super().__init__()
+        self.n_experts = n_experts
+        self.device = device
+        self.name = name
+        self.experts = nn.ModuleList([])
+        for _ in range(n_experts):
+            layer_copy = copy.deepcopy(base_layer)
+            lora_config = LoraConfig(
+                task_type=TaskType.FEATURE_EXTRACTION,
+                r=lora_rank,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=['q', 'v'],
+                bias='none',
+            )
+            expert = get_peft_model(layer_copy, lora_config).to(self.device)
+            self.experts.append(expert)
+        
+        self.gate = nn.Linear(hidden_size, self.n_experts).to(self.device)
+    
+    def extra_repr(self):
+        return f"name={self.name}, num_experts={self.n_experts}"
+
+    def forward(self, hidden_states, attention_mask=None, position_ids=None, head_mask=None, output_attentions=False):
+        scores = torch.softmax(self.gate(hidden_states), dim=-1)
+        outputs = 0
+        for i, expert in enumerate(self.experts):
+            # Pass hidden_states as keyword argument to match MPNetLayer signature
+            expert_output = expert(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                head_mask=head_mask,
+                output_attentions=output_attentions
+            )
+            outputs += scores[:, :, i].unsqueeze(-1) * expert_output[0]
+        outputs += hidden_states
+        outputs = outputs.unsqueeze(0)
+        return outputs
 # ...rest of your imports...
 def setting_mlflow():
     TRACKING_URI = "http://localhost:5000"  # Adjust as needed
@@ -58,14 +104,61 @@ def preprocess_batch(batch):
     
     return queries, corpus_texts
 
-def load_peft_model(model_name: str, lora_config: LoraConfig) -> PeftModel:
+def load_peft_model(model: SentenceTransformer, num_expert, lora_rank) -> PeftModel:
     """
     Load Peft Model for fine-tuning.
     """
+    hidden_size = model[0].auto_model.config.hidden_size
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = SentenceTransformer(model_name, device=device)
-    model = get_peft_model(model, lora_config).to(device)
+    for idx, layer in enumerate(model[0].auto_model.encoder.layer):
+            if idx in range(2, 12, 3):
+                model[0].auto_model.encoder.layer[idx] = MoELoRA(
+                    n_experts=num_expert,
+                    base_layer=layer,
+                    hidden_size=hidden_size,
+                    lora_rank=lora_rank,
+                    lora_alpha=2 * lora_rank,
+                    lora_dropout=0.1,
+                    name=f"MoELoRALayer-{idx}",
+                    device=device
+                )
+    for name, p in model.named_parameters():
+        if 'lora' in name:
+            p.requires_grad = True
+        else:
+            p.requires_grad = False
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    ratio = trainable_params / total_params if total_params > 0 else 0
+
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+    print(f"Non-trainable parameters: {total_params - trainable_params:,}")
+    print(f"Trainable ratio: {ratio:.2%}")
+
     return model
+
+def save_onnx_model(model):
+
+    device= 'cuda' if torch.cuda.is_available() else 'cpu'
+    # Get the underlying transformer model
+    transformer_model = model[0].auto_model.to(device)  # or peft_model._first_module().auto_model
+
+    # Prepare dummy input as a tuple of tensors
+    dummy_input = (
+        torch.randint(0, transformer_model.config.vocab_size, (2, 32)).to(device),  # input_ids
+        torch.ones(2, 32, dtype=torch.long).to(device)  # attention_mask
+    )
+
+    torch.onnx.export(
+        transformer_model,
+        dummy_input,
+        "model_base.onnx",
+        verbose=False,
+        input_names=['input_ids', 'attention_mask'],
+        output_names=['output']
+    )
+
 
 
 def eval(peft_model, test_data_loader):
@@ -95,16 +188,15 @@ def eval(peft_model, test_data_loader):
 def train(peft_model, train_data_loader, test_data_loader, optimizer, scheduler, num_epochs: int = 5):
     device = next(peft_model.parameters()).device
     print(f"Training on device: {device}")
-    
-    transformer = peft_model.model._first_module().auto_model 
+    transformer = peft_model._first_module().auto_model
     best_eval_loss = 1e9
     counter, patience = 0, 2
     step = 1
-    
+    accumulation_steps = 8
     for epoch in range(num_epochs):
         total_epoch_loss = 0.0
         peft_model.train()
-        accumulation_steps = 4
+        
         with tqdm(train_data_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", leave=False) as progress_bar:
             for idx, batch in enumerate(progress_bar):
                 # Stack input_ids for batching
@@ -123,7 +215,6 @@ def train(peft_model, train_data_loader, test_data_loader, optimizer, scheduler,
                 query_embeddings = query_outputs.last_hidden_state.mean(dim=1)
                 corpus_embeddings = corpus_outputs.last_hidden_state.mean(dim=1)
                 
-                loss = info_nce_loss(query_embeddings, corpus_embeddings)
                 loss = info_nce_loss(query_embeddings, corpus_embeddings)
                 loss /= accumulation_steps
                 loss.backward()
@@ -150,7 +241,7 @@ def train(peft_model, train_data_loader, test_data_loader, optimizer, scheduler,
 
         epoch_loss = total_epoch_loss / len(train_data_loader)
         eval_loss = eval(peft_model, test_data_loader)
-        print(f"Epoch {epoch + 1}/{num_epochs} | Train Loss: {epoch_loss:.4f} | Eval L  oss: {eval_loss:.4f}")
+        print(f"Epoch {epoch + 1}/{num_epochs} | Train Loss: {epoch_loss:.4f} | Eval Loss: {eval_loss:.4f}")
         mlflow.log_metric('eval_loss', eval_loss)
         mlflow.log_metric('epoch_loss', epoch_loss)
         if eval_loss < best_eval_loss - 1e-4:
@@ -163,88 +254,61 @@ def train(peft_model, train_data_loader, test_data_loader, optimizer, scheduler,
                 break        
     return peft_model, eval_loss
 
+
 def run():
-    setting_mlflow()
+    setting_mlflow() 
     NUM_EPOCHS = 4
-    BATCH_SIZE = 8
+    BATCH_SIZE = 4
+    NUM_EXPERT = 2
+    LORA_RANK = 2
     # Optimized grid - focus on promising configurations first
-    list_of_models = [
-        'sentence-transformers/all-mpnet-base-v2'
-        ]
-    
-    grid = {
-        'models': list_of_models,
-        "lora_rank": [32],
-        "dropout": [0],  
-        "lr": [1e-4],
-        'weight_decay': [0.01]
-    }
-    target_modules = {
-        'sentence-transformers/all-mpnet-base-v2': ["q", "v"], # Make it q, v
-        'sentence-transformers/msmarco-distilbert-base-v4': ["k_lin", "v_lin"],
-        'sentence-transformers/all-distilroberta-v1': ["query", "value"],
-        'sentence-transformers/all-MiniLM-L12-v2': ["query", "value"],
-    }
-    
+    model_name = 'sentence-transformers/all-mpnet-base-v2'
+    lr = 1e-4
     
     # Set environment variables for optimization
-    import os
     os.environ['TOKENIZERS_PARALLELISM'] = 'true'
-    
-    grid_product = list(product(*grid.values()))
-    with tqdm(grid_product, desc="Grid Search", total=len(grid_product)) as grid_bar:
-        for parms in grid_bar:
-            with mlflow.start_run(run_name=f"fine-tune-[{parms[0].split('/')[-1]}]"):   
-                train_data_loader = load_data('train', batch_size=BATCH_SIZE)  
-                test_data_loader = load_data('test', batch_size=BATCH_SIZE)
-                model_name, lora_rank, lora_dropout, lr, weight_decay = parms
-                
-                lora_config = LoraConfig(
-                    task_type=TaskType.FEATURE_EXTRACTION,
-                    r=lora_rank,
-                    lora_alpha=2 * lora_rank,
-                    lora_dropout=lora_dropout,
-                    bias='none',
-                    target_modules=target_modules[model_name],
-                    use_rslora=True,
-                    init_lora_weights="olora" 
-                )
-                
-                peft_model = load_peft_model(model_name, lora_config) 
-                tokenizer = peft_model.model.tokenizer
-                train_data_loader.dataset.tokenizer = tokenizer
-                test_data_loader.dataset.tokenizer = tokenizer
-                optimizer = torch.optim.AdamW(
-                    peft_model.parameters(), 
-                    lr=lr, 
-                    weight_decay=weight_decay
-                )
-                scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS * len(train_data_loader), eta_min=1e-6)
-                inital_val_loss = eval(peft_model, test_data_loader)
-                mlflow.log_metric('eval_loss', inital_val_loss, step=0)
-                peft_model, eval_loss = train(
-                    peft_model, train_data_loader, test_data_loader, 
-                    optimizer, scheduler, NUM_EPOCHS
-                )
-                
-                # Rest of your evaluation code...
-                data_index = create_index(test_data_loader, model_name, embed_model=PEFTEmbeddingModel(peft_model, model_name))
-                metrics = evaluate_lr(model_name, data_index, test_data_loader, compute_info_loss=False)
-                metrics['info_nce_loss'] = eval_loss
-                
-                for k, v in metrics.items():
-                    mlflow.log_metric(str(k).replace('@', '_'), v)
-                                    
-                # Log parameters
-                mlflow.set_tag('isTrained', 'True')
-                mlflow.log_param('base_model', model_name.split('/')[-1])
-                mlflow.log_param('lora_rank', lora_rank)
-                mlflow.log_param('lora_alpha', 2 * lora_rank)
-                mlflow.log_param('lora_dropout', lora_dropout)
-                mlflow.log_param('lr', lr)
-                mlflow.log_param('number_of_parameters', sum(p.numel() for p in peft_model.parameters()))
-                mlflow.log_param('LoraType', 'rslora')
-                mlflow.log_param("weight_decay", weight_decay)
+    with mlflow.start_run(run_name=f"fine-tune-[{model_name.split('/')[-1]}]"):   
+        train_data_loader = load_data('train', batch_size=BATCH_SIZE)  
+        test_data_loader = load_data('test', batch_size=BATCH_SIZE)
+        
+        base_model = SentenceTransformer(model_name)
+
+
+        tokenizer = base_model.tokenizer
+        train_data_loader.dataset.tokenizer = tokenizer
+        test_data_loader.dataset.tokenizer = tokenizer
+        peft_model = load_peft_model(base_model, NUM_EXPERT, LORA_RANK)
+
+#        save_onnx_model(peft_model)
+        optimizer = torch.optim.AdamW(
+            peft_model.parameters(), 
+            lr=lr, 
+            weight_decay=0.01
+        )
+        scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS * len(train_data_loader), eta_min=1e-6)
+        #inital_val_loss = eval(peft_model, test_data_loader)
+        #mlflow.log_metric('eval_loss', inital_val_loss, step=0)
+        peft_model, eval_loss = train(
+            peft_model, train_data_loader, test_data_loader, 
+            optimizer, scheduler, NUM_EPOCHS
+        )
+        
+        # Rest of your evaluation code...
+        data_index = create_index(test_data_loader, model_name, embed_model=PEFTEmbeddingModel(peft_model, model_name))
+        metrics = evaluate_lr(model_name, data_index, test_data_loader, compute_info_loss=False)
+        metrics['info_nce_loss'] = eval_loss
+        
+        for k, v in metrics.items():
+            mlflow.log_metric(str(k).replace('@', '_'), v)
+                            
+        # Log parameters
+        mlflow.set_tag('isTrained', 'True')
+        mlflow.set_tag('LoraType', 'MoELoRA')
+        mlflow.log_param('base_model', model_name.split('/')[-1])
+        mlflow.log_param('number_of_parameters', sum(p.numel() for p in peft_model.parameters()))
+        mlflow.log_param('number_of_experts', 2)
+        mlflow.log_param("lora_dropout", 0)
+        
 
 if __name__ == '__main__':
     run()
