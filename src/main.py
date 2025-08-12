@@ -9,6 +9,7 @@ from fastapi import FastAPI
 import uvicorn as uv
 import time
 from llama_index.core import Settings
+from contextlib import asynccontextmanager
 from llama_index.core import StorageContext, load_index_from_storage
 import logging
 
@@ -19,7 +20,12 @@ warnings.filterwarnings(
     module="torch.nn.modules.module"
 )
 
+INDEX_PATH = "data/index_store"
+GENERATOR_NAME = "TinyLlama/TinyLlama-1.1B-Ch   at-v1.0"
+MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
+ADAPTER_PATH = "models/all-mpnet-base-v2-adalora-best/adapter"
 
+chat_engine: BaseChatEngine = None
 class Query(BaseModel):
     input_msg: str
 
@@ -29,9 +35,24 @@ class Response(BaseModel):
     elapsed_time: float
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global chat_engine
+    logging.info('Starting Up: Loading Mode')
+    if load_chat_engine(MODEL_NAME, ADAPTER_PATH):
+        logging.info('Embedding Model Loaded Sucessfully')
+    else:
+        logging.error('Failed to load Embedding Model')
+    chat_engine = load_chat_engine(GENERATOR_NAME, INDEX_PATH)
+    logging.info("ChatEngine Loaded Sucessfully")
+    yield
+    logging.info('ShuttingDown')
+
+
 app = FastAPI(
     title="Financial RAG",
     description="RAG pipeline for financial document QA",
+    lifespan=lifespan
 )
 
 def set_embedding_model(model_name: str, adapter_path: str) -> bool:
@@ -67,23 +88,9 @@ async def respond(query: Query) -> Response:
     dt = t1 - t0
     return Response(answer=str(response), elapsed_time=dt)
 
-if __name__ == '__main__':
-    index_path = "data/index_store"
-    generator_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    model_name = "sentence-transformers/all-mpnet-base-v2"
-    adapterh_path = "models/all-mpnet-base-v2-adalora-best/adapter"
-    retrival_statue = set_embedding_model(
-        model_name=model_name,
-        adapter_path=adapterh_path
-    )
-    if retrival_statue:
-        logging.log('RetrivalLoadedSucessfully')
-    else:
-        logging.log("SomwthingWentWrong")
-    chat_engine = load_chat_engine(
-        generator_name=generator_name,
-        index_path=index_path
-    )
+
+
+if __name__ == '__main__'
     uv.run(app, host='0.0.0.0', port=8000)
 
 
