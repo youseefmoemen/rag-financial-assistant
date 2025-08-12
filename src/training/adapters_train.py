@@ -31,7 +31,7 @@ def setting_mlflow():
     mlflow.set_experiment(EXPERIMENT_NAME)
     print(f"Tracking URI set to {TRACKING_URI} and experiment name set to {EXPERIMENT_NAME}.")
 
-
+    
 def load_data(split: str = "train", batch_size: int = 64):  # Increased batch size
     fiqadata = FiqaDataset(split=split)
     print(f"Number of samples in FiQA {split} dataset: {len(fiqadata)}")
