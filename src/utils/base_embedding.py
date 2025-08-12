@@ -10,8 +10,12 @@ class PEFTEmbeddingModel(BaseEmbedding):
     def __init__(self, sentence_transformer, model_name=None, device=None):
         super().__init__()
         # Extract underlying transformer and tokenizer
-        self._model = sentence_transformer.model._first_module().auto_model
-        self._tokenizer = sentence_transformer.model.tokenizer
+        try:
+            self._model = sentence_transformer.model._first_module().auto_model
+            self._tokenizer = sentence_transformer.model.tokenizer
+        except Exception:
+            self._model = sentence_transformer._first_module().auto_model   
+            self._tokenizer = sentence_transformer.tokenizer
         self._device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self._model = self._model.to(self._device)
         self.model_name = model_name

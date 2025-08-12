@@ -1,7 +1,6 @@
 from beir.datasets.data_loader import GenericDataLoader
 from pathlib import Path
 import random
-from torch.utils.data import DataLoader
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 class FiqaDataset:
@@ -56,11 +55,3 @@ def preprocess_batch(self, batch):
 
 def collate_fn(batch):
     return batch
-
-if __name__ == "__main__":
-    fiqa_data = FiqaDataset("test")
-    dataloader = DataLoader(fiqa_data, batch_size=32, collate_fn=collate_fn)
-    for batch in dataloader:
-        print(batch)
-        break
-    print(f"Number of samples in FiQA train dataset: {len(fiqa_data)}")

@@ -49,3 +49,7 @@ huggingface/
 
 # Models
 models/
+
+#data
+data
+data/
