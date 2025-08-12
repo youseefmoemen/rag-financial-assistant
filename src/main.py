@@ -21,7 +21,7 @@ warnings.filterwarnings(
 )
 
 INDEX_PATH = "data/index_store"
-GENERATOR_NAME = "TinyLlama/TinyLlama-1.1B-Ch   at-v1.0"
+GENERATOR_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
 ADAPTER_PATH = "models/all-mpnet-base-v2-adalora-best/adapter"
 
@@ -39,7 +39,7 @@ class Response(BaseModel):
 async def lifespan(app: FastAPI):
     global chat_engine
     logging.info('Starting Up: Loading Mode')
-    if load_chat_engine(MODEL_NAME, ADAPTER_PATH):
+    if set_embedding_model(MODEL_NAME, ADAPTER_PATH):
         logging.info('Embedding Model Loaded Sucessfully')
     else:
         logging.error('Failed to load Embedding Model')
