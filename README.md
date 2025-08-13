@@ -109,7 +109,10 @@ print(response.json())
 # Clone and setup
 git clone https://github.com/yourusername/rag-financial-assistant.git
 cd rag-financial-assistant
-pip install -r requirements.txt
+
+# Install dependencies with Poetry
+poetry install
+poetry shell
 
 # Prepare your index (if not using pre-built)
 python scripts/build_index.py
