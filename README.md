@@ -16,3 +16,20 @@ The **Financial RAG Assistant** answers domain-specific questions using:
 
 
 # Training Retrival
+
+
+## Experimental Tracking
+
+## Best base Model
+
+
+## Different Lora Types
+
+## Differnt Lora Configiurations
+
+## Best model 
+
+
+## Fast API 
+
+## Docker
