@@ -283,7 +283,6 @@ def run():
                 mlflow.log_param('target_r', target_r)
                 mlflow.log_param('lora_alpha', lora_alpha)
                 mlflow.log_param('number_of_parameters', sum(p.numel() for p in peft_model.parameters()))
-                mlflow.log_param('LoraType', 'rslora')
                 mlflow.log_param("lora_dropout", lora_dropout)
                 
 

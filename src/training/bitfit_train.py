@@ -216,7 +216,7 @@ def run():
                             
         # Log parameters
         mlflow.set_tag('isTrained', 'True')
-        mlflow.set_tag('LoraType', 'bitfit')
+        mlflow.set_tag('PeftType', 'bitfit')
         mlflow.log_param('base_model', model_name.split('/')[-1])
         mlflow.log_param('number_of_parameters', sum(p.numel() for p in peft_model.parameters()))
         mlflow.log_param("lora_dropout", 0)
