@@ -50,11 +50,11 @@ After identifying the best base model, we fine-tuned `all-mpnet-base-v2` using v
 ### PEFT Configuration Analysis
 
 #### LoRA Rank Optimization
-![LoRA Rank Analysis](images/parallel_coordinates_plot.png)
+![LoRA Rank Analysis](images/best_ranks_from_mpnet.png)
 
 Our hyperparameter sweep revealed optimal LoRA configurations:
 - **Rank Values**: Tested from 2 to 64
-- **Best Rank**: [128]
+- **Best Rank**: 64
 - **Performance vs Efficiency**: Balanced approach for production deployment
 
 #### Advanced PEFT Comparison
@@ -288,9 +288,12 @@ The system is trained and optimized on the **Financial Question Answering (FiQA)
 After selecting `all-mpnet-base-v2` as the best base model, we fine-tuned it using different PEFT configurations:
 
 #### Training Progress
-![Training Loss](train_loss_chart.png)
+![Training Loss](images/train_loss.png)
 
 #### PEFT Method Comparison
+
+![nDCD10 comparison](images/nDCG10.png)
+
 | PEFT Method | Rank | Alpha | nDCG@10 | Recall@10 | AP@10 | Parameters Added |
 |-------------|------|-------|---------|-----------|-------|------------------|
 | LoRA | 2 | 4 | 0.66 | 0.76 | 0.60 | ~1.1M |
