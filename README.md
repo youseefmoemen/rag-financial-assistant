@@ -44,7 +44,7 @@ After identifying the best base model, we fine-tuned `all-mpnet-base-v2` using v
 
 **Key Findings:**
 - **Best Configuration**: LoRA with rank=64, alpha=128 (maintains base model performance: nDCG@10: 0.70)
-- **Efficiency Sweet Spot**: Rank=32 provides 96% of performance with 50% fewer parameters
+- **Efficiency Sweet Spot**: Rank=32 provides faster convergence 50% fewer parameters
 - **Training Stability**: All PEFT methods showed effective convergence around 1500 steps
 
 ### PEFT Configuration Analysis
