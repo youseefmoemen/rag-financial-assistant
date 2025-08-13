@@ -310,13 +310,13 @@ After selecting `all-mpnet-base-v2` as the best base model, we fine-tuned it usi
 - **Trade-off**: Rank 32-64 provides optimal balance between performance and efficiency
 
 ### System Performance
-| Component  | Memory Usage | Performance Metrics |
-|-----------|---------------|--------------|-------------------|
-| Embedding (Base)  | 1.1GB | nDCG@10: 0.70 |
-| Embedding (LoRA r=64) | 1.14GB | nDCG@10: 0.70 |
-| Retrieval | - | LlamaIndex vector search |
-| Generation (TinyLlama)  | 2.2GB | 1.1B parameter model |
-| **Total Pipeline** | **3.3GB** | **End-to-end financial QA** |
+| Component               | Memory Usage | Performance Metrics           |
+|-------------------------|--------------|--------------------------------|
+| Embedding (Base)        | 1.1 GB       | nDCG@10: 0.70                  |
+| Embedding (LoRA r=64)   | 1.14 GB      | nDCG@10: 0.70                  |
+| Retrieval               | -            | LlamaIndex vector search       |
+| Generation (TinyLlama)  | 2.2 GB       | 1.1B parameter model           |
+| **Total Pipeline**      | **3.3 GB**   | End-to-end financial QA        |
 
 ### BEIR FiQA Benchmark Results
 | Configuration | nDCG@10 | Recall@10 | AP@10 | Improvement |
