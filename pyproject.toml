@@ -1,0 +1,21 @@
+[project]
+name = "rag-financial-assistant"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "youseef",email = "youseefmoemen293@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.9,<4.0"
+dependencies = [
+    "fastapi (>=0.116.1,<0.117.0)",
+    "uvicorn (>=0.35.0,<0.36.0)",
+    "sentence-transformers (>=5.1.0,<6.0.0)",
+    "peft (>=0.17.0,<0.18.0)",
+    "llama-index (>=0.13.1,<0.14.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

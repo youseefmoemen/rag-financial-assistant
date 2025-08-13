@@ -1,0 +1,20 @@
+# git
+.git/
+.gitignore
+.vscode
+# Data used for training
+data/fiqa
+
+# MlFlow
+mlflow/
+mlruns/
+
+# training & evaluation codes
+src/data
+src/evaluation
+src/training
+
+__pycache__/
+*.pyc
+.git
+.venv
