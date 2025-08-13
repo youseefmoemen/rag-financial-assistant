@@ -34,14 +34,13 @@ evaluated_models = [
 ]
 ```
 
-![Base Model Comparison](base_models_comparison.png)
+![Base Model Comparison](images/zero_shot.png)
 
-**Winner**: `all-mpnet-base-v2` demonstrated superior performance across all metrics (nDCG@10: 0.70, Recall@10: 0.79, AP@10: 0.63), making it our choice for PEFT fine-tuning.
-
+**Winner**: `all-mpnet-base-v2` demonstrated superior performance over the info_nce_loss in a zero-shot setting
 ### PEFT Fine-Tuning Results
 After identifying the best base model, we fine-tuned `all-mpnet-base-v2` using various PEFT techniques:
 
-![Training Loss](train_loss_chart.png)
+![Training Loss](images/train_loss.png)
 
 **Key Findings:**
 - **Best Configuration**: LoRA with rank=64, alpha=128 (maintains base model performance: nDCG@10: 0.70)
@@ -51,23 +50,23 @@ After identifying the best base model, we fine-tuned `all-mpnet-base-v2` using v
 ### PEFT Configuration Analysis
 
 #### LoRA Rank Optimization
-![LoRA Rank Analysis](lora_rank_analysis.png)
+![LoRA Rank Analysis](images/parallel_coordinates_plot.png)
 
 Our hyperparameter sweep revealed optimal LoRA configurations:
 - **Rank Values**: Tested from 2 to 64
-- **Best Rank**: [Your optimal rank]
+- **Best Rank**: [128]
 - **Performance vs Efficiency**: Balanced approach for production deployment
 
 #### Advanced PEFT Comparison
-![PEFT Methods Comparison](peft_comparison.png)
+![PEFT Methods Comparison](images/different_lora_performance.png)
 
 **Comparison Results:**
 - **AdaLoRA**: Adaptive rank allocation for efficient fine-tuning
 - **Standard LoRA**: Consistent performance across configurations
-- **Bitfit**: Minimal parameter updates with competitive results
+- **MoE-LoRA**: MoE-LoRA techniques that adds multiple lora modules by layer
 
 ### Hyperparameter Analysis
-![Parallel Coordinates Analysis](parallel_coordinates.png)
+![Parallel Coordinates Analysis](images/parallel_coordinates_plot.png)
 
 Our systematic hyperparameter optimization revealed:
 - **Optimal LoRA Rank**: 64 (best performance vs parameter trade-off)
@@ -118,40 +117,6 @@ python scripts/build_index.py
 # Start the API server
 python main.py
 # Server will be available at http://localhost:8000
-```
-
-## 🔧 Training Your Own Model
-
-### 1. Prepare Your Dataset
-```bash
-# Place your financial documents in the data directory
-mkdir data/documents
-# Add your training Q&A pairs
-mkdir data/training
-```
-
-### 2. Configure Training Parameters
-```python
-training_config = {
-    "base_model": "all-mpnet-base-v2",
-    "peft_type": "lora",
-    "lora_rank": 32,
-    "lora_alpha": 64,
-    "lora_dropout": 0.1,
-    "learning_rate": 1e-4,
-    "num_epochs": 10
-}
-```
-
-### 3. Start Training with MLflow Tracking
-```bash
-python train.py --config training_config.yaml
-```
-
-### 4. Monitor Training Progress
-```bash
-mlflow ui
-# Navigate to http://localhost:5000
 ```
 
 ## 📈 Experiment Tracking
@@ -250,21 +215,6 @@ docker build -t rag-financial-assistant .
 ### Run Container
 ```bash
 docker run -p 8000:8000 rag-financial-assistant
-```
-
-### Docker Compose
-```yaml
-version: '3.8'
-services:
-  rag-api:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - MODEL_PATH=/models/best-model
-    volumes:
-      - ./models:/models
-      - ./data:/app/data
 ```
 
 ## 📋 Configuration Options
@@ -372,19 +322,4 @@ After selecting `all-mpnet-base-v2` as the best base model, we fine-tuned it usi
 | **+ LoRA (rank=64)** | **0.70** | **0.79** | **0.63** | **±0%** |
 
 
-### Development Setup
-```bash
-git clone https://github.com/yourusername/rag-financial-assistant.git
-cd rag-financial-assistant
-pip install -e ".[dev]"
-pre-commit install
-```
-
-
-## 🙏 Acknowledgments
-
-- **Hugging Face** for transformer models and PEFT library
-- **LlamaIndex** for RAG infrastructure
-- **MLflow** for experiment tracking
-- **FastAPI** for API framework
 
